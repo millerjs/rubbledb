@@ -1,6 +1,9 @@
 use ::errors::RubbleResult;
 use regex::Regex;
 
+lazy_static! {
+    static ref REGEX_U64: Regex = Regex::new(r"(\d+)(.*)").unwrap();
+}
 
 pub struct ParseU64Result {
     pub number: u64,
@@ -13,14 +16,13 @@ pub struct ParseU64Result {
 /// unspecified state.
 pub fn parse_u64(text: &str) -> RubbleResult<ParseU64Result>
 {
-    let regex = Regex::new(r"(\d+)(.*)").unwrap();
-    match regex.captures(text).and_then(|c| c.at(0)) {
-        None => Err("No int found".into()),
-        Some(substring) => {
-            Ok(ParseU64Result{
+    match REGEX_U64.captures(text).and_then(|c| c.at(0)) {
+        Some(substring) => Ok(
+            ParseU64Result{
                 number: try!(substring.parse()),
                 offset: substring.len(),
-            })
-        },
+            }
+        ),
+        None => Err("No integer found in string".into()),
     }
 }

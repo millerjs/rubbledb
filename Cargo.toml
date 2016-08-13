@@ -6,3 +6,4 @@ authors = ["Joshua Miller <jsmiller@uchicago.edu>"]
 [dependencies]
 quick-error = "*"
 regex = "0.1"
+lazy_static = "*"

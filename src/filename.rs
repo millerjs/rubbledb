@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 // use slice;
 // use status;
 
@@ -8,8 +7,8 @@ use ::util;
 pub struct Env;
 
 pub struct FileNameDetails {
-    number: u64,
-    file_type: FileType,
+    pub number: u64,
+    pub file_type: FileType,
 }
 
 pub enum FileType {
@@ -142,6 +141,8 @@ fn parse_file_name(fname: &str) -> RubbleResult<FileNameDetails>
     })
 }
 
+// /// TODO
+// ///
 // /// Make the CURRENT file point to the descriptor file with the
 // /// specified number.
 // fn set_current_file(env: &mut Env, dbname: &str, descriptor_number: u64) -> Status
