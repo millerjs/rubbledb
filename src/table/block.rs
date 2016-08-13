@@ -32,9 +32,8 @@ pub trait Block {
     fn iter_slice<'a, T: SliceComparator>(&'a self, comparator: T, slice: Slice<'a>) -> BlockIterator<'a, T>
     {
         if self.get_size() < mem::size_of::<u32>() {
-            let mut iter = BlockIterator::new(comparator, &[], 0, 0);
-            iter.status = Status::Corruption("bad block contents".into());
-            iter
+            BlockIterator::new(comparator, &[], 0, 0)
+                .with_status(Status::Corruption("bad block contents".into()))
         } else {
             let num_restarts = Self::num_restarts(slice);
             if num_restarts == 0 {
@@ -183,6 +182,12 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
             current: restarts,
             restart_index: num_restarts,
         }
+    }
+
+    fn with_status(mut self, status: Status) -> BlockIterator<'a, T>
+    {
+        self.status = status;
+        self
     }
 
     fn compare(&self, a: Slice, b: Slice) -> i32
@@ -364,19 +369,6 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
         true
     }
 }
-
-
-// Iterator* Block::NewIterator(const Comparator* cmp) {
-//   if (size_ < sizeof(uint32_t)) {
-//     return NewErrorIterator(Status::Corruption("bad block contents"));
-//   }
-//   const uint32_t num_restarts = NumRestarts();
-//   if (num_restarts == 0) {
-//     return NewEmptyIterator();
-//   } else {
-//     return new Iter(cmp, data_, restart_offset_, num_restarts);
-//   }
-// }
 
 pub struct KVEntry {
     key: String,
