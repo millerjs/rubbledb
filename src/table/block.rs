@@ -30,19 +30,6 @@ pub trait Block {
 impl Block for OwnedBlock {
     fn get_size(&self) -> usize { self.data.len() }
     fn data(&self) -> Slice { &self.data }
-
-// Iterator* Block::NewIterator(const Comparator* cmp) {
-//   if (size_ < sizeof(uint32_t)) {
-//     return NewErrorIterator(Status::Corruption("bad block contents"));
-//   }
-//   const uint32_t num_restarts = NumRestarts();
-//   if (num_restarts == 0) {
-//     return NewEmptyIterator();
-//   } else {
-//     return new Iter(cmp, data_, restart_offset_, num_restarts);
-//   }
-// }
-
 }
 
 impl<'a> Block for SliceBlock<'a> {
@@ -199,12 +186,17 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
         &self.status
     }
 
-    pub fn key(&self) -> Slice {
+    pub fn key(&self) -> String {
+        assert!(self.is_valid());
+        self.key.clone()
+    }
+
+    pub fn value(&self) -> Slice {
         assert!(self.is_valid());
         &self.data[self.value_offset..self.value_offset+self.value_len]
     }
 
-    pub fn next(&mut self) {
+    pub fn step(&mut self) {
         assert!(self.is_valid());
         self.parse_next_key();
     }
@@ -333,8 +325,40 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
             self.restart_index += 1;
         }
 
-        return true;
-
+        true
     }
+}
 
+
+// Iterator* Block::NewIterator(const Comparator* cmp) {
+//   if (size_ < sizeof(uint32_t)) {
+//     return NewErrorIterator(Status::Corruption("bad block contents"));
+//   }
+//   const uint32_t num_restarts = NumRestarts();
+//   if (num_restarts == 0) {
+//     return NewEmptyIterator();
+//   } else {
+//     return new Iter(cmp, data_, restart_offset_, num_restarts);
+//   }
+// }
+
+pub struct KVEntry {
+    key: String,
+    value: Vec<u8>,
+}
+
+impl<'a, T: SliceComparator> Iterator for BlockIterator<'a, T> {
+    // we will be counting with usize
+    type Item = KVEntry;
+
+    fn next(&mut self) -> Option<KVEntry> {
+        self.step();
+        match self.num_restarts {
+            0 => None,
+            _ => Some(KVEntry {
+                key: self.key(),
+                value: self.value().to_vec(),
+            })
+        }
+    }
 }
