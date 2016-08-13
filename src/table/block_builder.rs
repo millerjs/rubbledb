@@ -76,8 +76,7 @@ impl<'a> BlockBuilder<'a> {
 
     pub fn new(options: &'a Options) -> BlockBuilder
     {
-        // TODO
-        // assert!(options.block_restart_interval > =1);
+        assert!(options.block_restart_interval > =1);
         BlockBuilder {
             buffer: vec![],
             options: options,
@@ -92,19 +91,19 @@ impl<'a> BlockBuilder<'a> {
     {
         // Raw data buffer
         self.buffer.len()
-        //    Restart array
+        // Restart array
             + self.restarts.len() * mem::size_of::<u32>()
-        //    Restart array length
+        // Restart array length
             + mem::size_of::<u32>()
     }
 
     pub fn finish(&mut self) -> Slice
     {
         // Append restart array
-        for i in 0..self.restarts.len() {
-            // PutFixed32(&buffer_, restarts_[i]);
+        for restart in &self.restarts {
+            coding::put_fixed32(&mut self.buffer, *restart as u32);
         }
-        // PutFixed32(&buffer_, restarts_.size());
+        coding::put_fixed32(&mut self.buffer, self.restarts.len() as u32);
         self.finished = true;
         self.buffer.as_slice()
     }
