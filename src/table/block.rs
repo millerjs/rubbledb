@@ -7,39 +7,41 @@ use std::mem;
 
 pub struct OwnedBlock {
     data: Vec<u8>,
-    restart_offset: u32,
+    restart_offset: usize,
 }
 
 pub struct SliceBlock<'a> {
     data: Slice<'a>,
-    restart_offset: u32,
+    restart_offset: usize,
 }
 
 pub trait Block {
     fn get_size(&self) -> usize;
+    fn data(&self) -> Slice;
 
-    fn num_restarts(size: usize) -> u32
+    fn num_restarts(data: Slice) -> usize
     {
-        assert!(size >= mem::size_of::<u32>());
-        10
-        // TODO: DecodeFixed32(data_ + size_ - sizeof(uint32_t));
+        assert!(data.len() >= mem::size_of::<u32>());
+        let offset = data.len() - mem::size_of::<u32>();
+        coding::decode_fixed32(&data[offset..]) as usize
     }
 }
 
 impl Block for OwnedBlock {
     fn get_size(&self) -> usize { self.data.len() }
+    fn data(&self) -> Slice { &self.data }
 }
 
 impl<'a> Block for SliceBlock<'a> {
     fn get_size(&self) -> usize { self.data.len() }
-}
+    fn data(&self) -> Slice { self.data }}
 
 impl OwnedBlock {
     fn new(contents: Slice) -> RubbleResult<OwnedBlock>
     {
-        let sizeof_u32 = mem::size_of::<u32>() as u32;
-        let max_restarts_allowed = (contents.len() as u32 -sizeof_u32) / sizeof_u32;
-        let num_restarts = Self::num_restarts(contents.len());
+        let sizeof_u32 = mem::size_of::<u32>();
+        let max_restarts_allowed = (contents.len() - sizeof_u32) / sizeof_u32;
+        let num_restarts = Self::num_restarts(contents);
 
         if num_restarts > max_restarts_allowed {
             return Err("The size is too small for num_restarts()".into())
@@ -47,9 +49,7 @@ impl OwnedBlock {
 
         Ok(OwnedBlock {
             data: contents.to_vec(),
-            restart_offset: (
-                contents.len() - (1 + num_restarts as usize) * sizeof_u32 as usize
-            ) as u32,
+            restart_offset: contents.len() - (1 + num_restarts) * sizeof_u32,
         })
     }
 }
@@ -114,28 +114,28 @@ fn decode_entry(mut p: &[u8]) -> RubbleResult<DecodedEntry>
 }
 
 pub trait SliceComparator {
-    fn compare(&self, a: Slice, b: Slice) -> usize;
+    fn compare(&self, a: Slice, b: Slice) -> i32;
 }
 
 pub struct BlockIterator<'a, T: SliceComparator> {
     comparator: T,
     data: Slice<'a>,
     value: Slice<'a>,
-    restarts: u32,
-    num_restarts: u32,
-    current: u32,
-    restart_index: u32,
+    restarts: usize,
+    num_restarts: usize,
+    current: usize,
+    restart_index: usize,
     key: String,
     status: Status,
 }
 
 impl<'a, T: SliceComparator> BlockIterator<'a, T> {
-    pub fn new(comparator: T, data: Slice<'a>, restarts: u32, num_restarts: u32) -> BlockIterator<'a, T>
+    pub fn new(comparator: T, data: Slice<'a>, restarts: usize, num_restarts: usize) -> BlockIterator<'a, T>
     {
         assert!(num_restarts > 0);
         BlockIterator::<'a, T> {
             key: String::new(),
-            status: Status::new(),
+            status: Status::Ok,
             value: data,
             comparator: comparator,
             data: data,
@@ -146,21 +146,22 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
         }
     }
 
-    fn compare(&self, a: Slice, b: Slice) -> usize {
+    fn compare(&self, a: Slice, b: Slice) -> i32 {
         self.comparator.compare(a, b)
     }
 
-    // /// Return the slice in data_ just past the end of the current entry.
-    // fn next_entry(&self) -> Slice {
-    // }
-
-    fn get_restart_point(&self, index: u32) -> u32 {
-        assert!(index < self.num_restarts);
-        let offset = self.restarts as usize + index as usize * mem::size_of::<u32>();
-        coding::decode_fixed32(&self.data[offset..])
+    /// Return the slice in data_ just past the end of the current entry.
+    fn next_entry_offset(&self) -> usize {
+        self.value.len()
     }
 
-    fn seek_to_restart_point(&mut self, index: u32) {
+    fn get_restart_point(&self, index: usize) -> usize {
+        assert!(index < self.num_restarts);
+        let offset = self.restarts + index * mem::size_of::<u32>();
+        coding::decode_fixed32(&self.data[offset..]) as usize
+    }
+
+    pub fn seek_to_restart_point(&mut self, index: usize) {
         self.key = String::new();
         self.restart_index = index;
         // current_ will be fixed by ParseNextKey();
@@ -170,122 +171,145 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
         self.value = &self.data[offset as usize..];
     }
 
+    pub fn is_valid(&self) -> bool
+    {
+        self.current < self.restarts
+    }
+
+    pub fn status(&self) -> &Status {
+        &self.status
+    }
+
+    pub fn key(&self) -> Slice {
+        assert!(self.is_valid());
+        self.value
+    }
+
+    pub fn next(&mut self) {
+        self.parse_next_key();
+    }
+
+    pub fn prev(&mut self) {
+        assert!(self.is_valid());
+
+        // Scan backwards to a restart point before current_
+        let original = self.current;
+
+        while self.get_restart_point(self.restart_index) >= original {
+            if self.restart_index == 0 {
+                // No more entries
+                self.current = self.restarts;
+                self.restart_index = self.num_restarts;
+                return;
+            }
+            self.restart_index -= 1;
+        }
+    }
+
+    pub fn seek(&mut self, target: Slice)
+    {
+        // Binary search in restart array to find the last restart point
+        // with a key < target
+        let mut left = 0;
+        let mut right = self.num_restarts - 1;
+
+        while left < right {
+            let mid = (left + right + 1) / 2;
+            let region_offset = self.get_restart_point(mid);
+
+            // let shared, non_shared, value_length;
+
+            let entry = match decode_entry(&self.data[region_offset as usize..]) {
+                Err(_) => return self.corruption_error(),
+                Ok(key) => key,
+            };
+
+            if entry.shared != 0 {
+                return self.corruption_error()
+            }
+
+            let mid_key = entry.new_slice;
+
+            if self.compare(mid_key, target) < 0 {
+                // Key at "mid" is smaller than "target".  Therefore all
+                // blocks before "mid" are uninteresting.
+                left = mid;
+            } else {
+                // Key at "mid" is >= "target".  Therefore all blocks at or
+                // after "mid" are uninteresting.
+                right = mid - 1;
+            }
+
+        }
+
+        // Linear search (within restart block) for first key >= target
+        self.seek_to_restart_point(left);
+
+        loop {
+            if !self.parse_next_key() {
+                return;
+            }
+            if self.compare(self.key.as_bytes(), target) >= 0 {
+                return;
+            }
+        }
+
+    }
+
+    pub fn seek_to_first(&mut self) {
+        self.seek_to_restart_point(0);
+        self.parse_next_key();
+    }
+
+    pub fn seek_to_last(&mut self) {
+        let n_restarts = self.num_restarts - 1;
+        self.seek_to_restart_point(n_restarts);
+        while self.parse_next_key() && self.next_entry_offset() < self.restarts {
+            // Keep skipping
+        }
+    }
+
+    fn corruption_error(&mut self) {
+        self.current = self.restarts;
+        self.restart_index = self.num_restarts;
+        self.status = Status::Corruption("bad entry in block".into());
+        self.key = String::new();
+    }
+
+    fn parse_next_key(&mut self) -> bool { true }
+
+    // fn parse_next_key(&mut self) -> bool {
+    //     let current = self.next_entry_offset();
+    //     // let p = data_[] + current_;
+    //     const char* limit = data_ + restarts_;  // Restarts come right after data
+    //     if (p >= limit) {
+    //         // No more entries to return.  Mark as invalid.
+    //         current_ = restarts_;
+    //         restart_index_ = num_restarts_;
+    //         return false;
+    //     }
+
+    //     // Decode next entry
+    //     uint32_t shared, non_shared, value_length;
+    //     p = DecodeEntry(p, limit, &shared, &non_shared, &value_length);
+    //     if (p == NULL || key_.size() < shared) {
+    //         CorruptionError();
+    //         return false;
+    //     } else {
+    //         key_.resize(shared);
+    //         key_.append(p, non_shared);
+    //         value_ = Slice(p + non_shared, value_length);
+    //         while (restart_index_ + 1 < num_restarts_ &&
+    //                GetRestartPoint(restart_index_ + 1) < current_) {
+    //             ++restart_index_;
+    //         }
+    //         return true;
+    //     }
+    // }
 
 }
 
-// class Block::Iter : public Iterator {
 
-//  public:
-//   Iter(const Comparator* comparator,
-//        const char* data,
-//        uint32_t restarts,
-//        uint32_t num_restarts)
-//       : comparator_(comparator),
-//         data_(data),
-//         restarts_(restarts),
-//         num_restarts_(num_restarts),
-//         current_(restarts_),
-//         restart_index_(num_restarts_) {
-//     assert(num_restarts_ > 0);
-//   }
-
-//   virtual bool Valid() const { return current_ < restarts_; }
-//   virtual Status status() const { return status_; }
-//   virtual Slice key() const {
-//     assert(Valid());
-//     return key_;
-//   }
-//   virtual Slice value() const {
-//     assert(Valid());
-//     return value_;
-//   }
-
-//   virtual void Next() {
-//     assert(Valid());
-//     ParseNextKey();
-//   }
-
-//   virtual void Prev() {
-//     assert(Valid());
-
-//     // Scan backwards to a restart point before current_
-//     const uint32_t original = current_;
-//     while (GetRestartPoint(restart_index_) >= original) {
-//       if (restart_index_ == 0) {
-//         // No more entries
-//         current_ = restarts_;
-//         restart_index_ = num_restarts_;
-//         return;
-//       }
-//       restart_index_--;
-//     }
-
-//     SeekToRestartPoint(restart_index_);
-//     do {
-//       // Loop until end of current entry hits the start of original entry
-//     } while (ParseNextKey() && NextEntryOffset() < original);
-//   }
-
-//   virtual void Seek(const Slice& target) {
-//     // Binary search in restart array to find the last restart point
-//     // with a key < target
-//     uint32_t left = 0;
-//     uint32_t right = num_restarts_ - 1;
-//     while (left < right) {
-//       uint32_t mid = (left + right + 1) / 2;
-//       uint32_t region_offset = GetRestartPoint(mid);
-//       uint32_t shared, non_shared, value_length;
-//       const char* key_ptr = DecodeEntry(data_ + region_offset,
-//                                         data_ + restarts_,
-//                                         &shared, &non_shared, &value_length);
-//       if (key_ptr == NULL || (shared != 0)) {
-//         CorruptionError();
-//         return;
-//       }
-//       Slice mid_key(key_ptr, non_shared);
-//       if (Compare(mid_key, target) < 0) {
-//         // Key at "mid" is smaller than "target".  Therefore all
-//         // blocks before "mid" are uninteresting.
-//         left = mid;
-//       } else {
-//         // Key at "mid" is >= "target".  Therefore all blocks at or
-//         // after "mid" are uninteresting.
-//         right = mid - 1;
-//       }
-//     }
-
-//     // Linear search (within restart block) for first key >= target
-//     SeekToRestartPoint(left);
-//     while (true) {
-//       if (!ParseNextKey()) {
-//         return;
-//       }
-//       if (Compare(key_, target) >= 0) {
-//         return;
-//       }
-//     }
-//   }
-
-//   virtual void SeekToFirst() {
-//     SeekToRestartPoint(0);
-//     ParseNextKey();
-//   }
-
-//   virtual void SeekToLast() {
-//     SeekToRestartPoint(num_restarts_ - 1);
-//     while (ParseNextKey() && NextEntryOffset() < restarts_) {
-//       // Keep skipping
-//     }
-//   }
-
-//  private:
-//   void CorruptionError() {
-//     current_ = restarts_;
-//     restart_index_ = num_restarts_;
-//     status_ = Status::Corruption("bad entry in block");
-//     key_.clear();
-//     value_.clear();
-//   }
 
 //   bool ParseNextKey() {
 //     current_ = NextEntryOffset();
