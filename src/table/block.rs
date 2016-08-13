@@ -18,6 +18,9 @@ pub struct SliceBlock<'a> {
 pub trait Block {
     fn get_size(&self) -> usize;
     fn data(&self) -> Slice;
+    fn restart_offset(&self) -> usize;
+
+    fn iter<'a, T: SliceComparator>(&'a self, comparator: T) -> BlockIterator<'a, T>;
 
     fn num_restarts(data: Slice) -> usize
     {
@@ -25,33 +28,49 @@ pub trait Block {
         let offset = data.len() - mem::size_of::<u32>();
         coding::decode_fixed32(&data[offset..]) as usize
     }
+
+    fn iter_slice<'a, T: SliceComparator>(&'a self, comparator: T, slice: Slice<'a>) -> BlockIterator<'a, T>
+    {
+        if self.get_size() < mem::size_of::<u32>() {
+            let mut iter = BlockIterator::new(comparator, &[], 0, 0);
+            iter.status = Status::Corruption("bad block contents".into());
+            iter
+        } else {
+            let num_restarts = Self::num_restarts(slice);
+            if num_restarts == 0 {
+                BlockIterator::new(comparator, &[], 0, 0)
+            } else {
+                let restart_offset = self.restart_offset();
+                BlockIterator::new(comparator, slice, restart_offset, num_restarts)
+            }
+        }
+    }
+
 }
 
 impl Block for OwnedBlock {
     fn get_size(&self) -> usize { self.data.len() }
     fn data(&self) -> Slice { &self.data }
+    fn restart_offset(&self) -> usize { self.restart_offset }
 
-    pub fn iter(&self) -> BlockIterator<'a, T: SliceComparator>
+    fn iter<'a, T: SliceComparator>(&'a self, comparator: T) -> BlockIterator<'a, T>
     {
-
-        // Iterator* Block::NewIterator(const Comparator* cmp) {
-        //   if (size_ < sizeof(uint32_t)) {
-        //     return NewErrorIterator(Status::Corruption("bad block contents"));
-        //   }
-        //   const uint32_t num_restarts = NumRestarts();
-        //   if (num_restarts == 0) {
-        //     return NewEmptyIterator();
-        //   } else {
-        //     return new Iter(cmp, data_, restart_offset_, num_restarts);
-        //   }
-        // }
-
+        self.iter_slice(comparator, self.data.as_slice())
     }
 }
 
+
 impl<'a> Block for SliceBlock<'a> {
     fn get_size(&self) -> usize { self.data.len() }
-    fn data(&self) -> Slice { self.data }}
+    fn data(&self) -> Slice { self.data }
+    fn restart_offset(&self) -> usize { self.restart_offset }
+
+    fn iter<'i, T: SliceComparator>(&'i self, comparator: T) -> BlockIterator<'i, T>
+    {
+        self.iter_slice(comparator, self.data)
+    }
+}
+
 
 impl OwnedBlock {
     fn new(contents: Slice) -> RubbleResult<OwnedBlock>
