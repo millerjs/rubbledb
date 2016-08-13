@@ -4,6 +4,7 @@ use ::util;
 use ::util::coding;
 use ::status::Status;
 use std::mem;
+use std::str;
 
 pub struct OwnedBlock {
     data: Vec<u8>,
@@ -276,36 +277,45 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
         self.key = String::new();
     }
 
-    fn parse_next_key(&mut self) -> bool { true }
+    fn parse_next_key(&mut self) -> bool {
+        self.current = self.next_entry_offset();
+        let p = &self.data[self.current..];
 
-    // fn parse_next_key(&mut self) -> bool {
-    //     let current = self.next_entry_offset();
-    //     // let p = data_[] + current_;
-    //     const char* limit = data_ + restarts_;  // Restarts come right after data
-    //     if (p >= limit) {
-    //         // No more entries to return.  Mark as invalid.
-    //         current_ = restarts_;
-    //         restart_index_ = num_restarts_;
-    //         return false;
-    //     }
+        if p.len() == 0 {
+            // No more entries to return.  Mark as invalid.
+            self.current = self.restarts;
+            self.restart_index = self.num_restarts;
+            return false;
+        }
 
-    //     // Decode next entry
-    //     uint32_t shared, non_shared, value_length;
-    //     p = DecodeEntry(p, limit, &shared, &non_shared, &value_length);
-    //     if (p == NULL || key_.size() < shared) {
-    //         CorruptionError();
-    //         return false;
-    //     } else {
-    //         key_.resize(shared);
-    //         key_.append(p, non_shared);
-    //         value_ = Slice(p + non_shared, value_length);
-    //         while (restart_index_ + 1 < num_restarts_ &&
-    //                GetRestartPoint(restart_index_ + 1) < current_) {
-    //             ++restart_index_;
-    //         }
-    //         return true;
-    //     }
-    // }
+        let entry = match decode_entry(p) {
+            Ok(p) => p,
+            _ => {
+                self.corruption_error();
+                return false;
+            }
+        };
+
+        if self.key.len() < entry.shared as usize {
+            self.corruption_error();
+            return false;
+        }
+
+        self.key = str::from_utf8(&entry.new_slice[..entry.non_shared as usize])
+            .expect("Invalid UTF-8 key")
+            .to_owned();
+
+        self.value = &p[entry.non_shared as usize..entry.value_length as usize];
+
+        while self.restart_index + 1 < self.num_restarts
+            && self.get_restart_point(self.restart_index + 1) < self.current
+        {
+            self.restart_index += 1;
+        }
+
+        return true;
+
+    }
 
 }
 
