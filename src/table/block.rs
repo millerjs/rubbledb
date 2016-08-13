@@ -112,9 +112,11 @@ fn decode_entry(mut p: &[u8]) -> RubbleResult<DecodedEntry>
     });
 }
 
-pub trait Comparator {}
+pub trait SliceComparator {
+    pub fn compare(a: Slice, b: Slice) -> usize;
+}
 
-pub struct BlockIterator<'a, T: Comparator> {
+pub struct BlockIterator<'a, T: SliceComparator> {
     comparator: T,
     data: Slice<'a>,
     restarts: u32,
@@ -125,10 +127,11 @@ pub struct BlockIterator<'a, T: Comparator> {
     status: Status,
 }
 
-
-// impl BlockIterator {
-//     fn compare()
-// }
+impl<'a, T> BlockIterator<'a, T> where T: SliceComparator{
+    fn compare(&self, a: Slice, b: Slice) -> usize {
+        self.comparator.compare(a, b);
+    }
+}
 
 // class Block::Iter : public Iterator {
 //  private:
