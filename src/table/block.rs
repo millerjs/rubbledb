@@ -30,6 +30,23 @@ pub trait Block {
 impl Block for OwnedBlock {
     fn get_size(&self) -> usize { self.data.len() }
     fn data(&self) -> Slice { &self.data }
+
+    pub fn iter(&self) -> BlockIterator<'a, T: SliceComparator>
+    {
+
+        // Iterator* Block::NewIterator(const Comparator* cmp) {
+        //   if (size_ < sizeof(uint32_t)) {
+        //     return NewErrorIterator(Status::Corruption("bad block contents"));
+        //   }
+        //   const uint32_t num_restarts = NumRestarts();
+        //   if (num_restarts == 0) {
+        //     return NewEmptyIterator();
+        //   } else {
+        //     return new Iter(cmp, data_, restart_offset_, num_restarts);
+        //   }
+        // }
+
+    }
 }
 
 impl<'a> Block for SliceBlock<'a> {
