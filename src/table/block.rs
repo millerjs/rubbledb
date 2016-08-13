@@ -134,18 +134,6 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
 }
 
 // class Block::Iter : public Iterator {
-//  private:
-//   const Comparator* const comparator_;
-//   const char* const data_;      // underlying block contents
-//   uint32_t const restarts_;     // Offset of restart array (list of fixed32)
-//   uint32_t const num_restarts_; // Number of uint32_t entries in restart array
-
-//   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
-//   uint32_t current_;
-//   uint32_t restart_index_;  // Index of restart block in which current_ falls
-//   std::string key_;
-//   Slice value_;
-//   Status status_;
 
 //   inline int Compare(const Slice& a, const Slice& b) const {
 //     return comparator_->Compare(a, b);
