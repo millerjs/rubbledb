@@ -131,11 +131,12 @@ pub struct BlockIterator<'a, T: SliceComparator> {
 
 impl<'a, T: SliceComparator> BlockIterator<'a, T> {
 
-    pub fn new(comparator: T, data: Slice, restarts: u32, num_restarts: u32) -> BlockIterator<'a, T>
+    pub fn new(comparator: T, data: Slice<'a>, restarts: u32, num_restarts: u32) -> BlockIterator<'a, T>
     {
         assert!(num_restarts > 0);
-        BlockIterator::<T> {
+        BlockIterator::<'a, T> {
             key: String::new(),
+            status: Status::new(),
             value: data,
             comparator: comparator,
             data: data,
