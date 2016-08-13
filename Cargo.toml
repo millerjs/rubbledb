@@ -7,3 +7,4 @@ authors = ["Joshua Miller <jsmiller@uchicago.edu>"]
 quick-error = "*"
 regex = "0.1"
 lazy_static = "*"
+byteorder = "0.5"

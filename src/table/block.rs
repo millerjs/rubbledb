@@ -1,6 +1,7 @@
 use ::slice::Slice;
 use ::errors::RubbleResult;
 use ::util;
+use ::util::coding;
 use ::status::Status;
 use std::mem;
 
@@ -87,13 +88,13 @@ fn decode_entry(mut p: &[u8]) -> RubbleResult<DecodedEntry>
         cur += 3;
 
     } else {
-        let fallback = try!(util::coding::get_varint32_ptr_fallback(p));
+        let fallback = try!(coding::get_varint32_ptr_fallback(p));
         p = fallback.slice;
         shared = fallback.value;
-        let fallback = try!(util::coding::get_varint32_ptr_fallback(p));
+        let fallback = try!(coding::get_varint32_ptr_fallback(p));
         p = fallback.slice;
         non_shared = fallback.value;
-        let fallback = try!(util::coding::get_varint32_ptr_fallback(p));
+        let fallback = try!(coding::get_varint32_ptr_fallback(p));
         p = fallback.slice;
         value_length = fallback.value;
     }
@@ -119,10 +120,11 @@ pub trait SliceComparator {
 pub struct BlockIterator<'a, T: SliceComparator> {
     comparator: T,
     data: Slice<'a>,
+    value: Slice<'a>,
     restarts: u32,
     num_restarts: u32,
-    current: usize,
-    restart_index: usize,
+    current: u32,
+    restart_index: u32,
     key: String,
     status: Status,
 }
@@ -134,23 +136,23 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
 
     // /// Return the slice in data_ just past the end of the current entry.
     // fn next_entry(&self) -> Slice {
-
     // }
 
-    // fn get_restart_point(index: u32) ->  {
-    //     assert!(index < self.num_restarts);
-    //     // return DecodeFixed32(data_ + restarts_ + index * sizeof(uint32_t));
-    // }
+    fn get_restart_point(&self, index: u32) -> u32 {
+        assert!(index < self.num_restarts);
+        let offset = self.restarts as usize + index as usize * mem::size_of::<u32>();
+        coding::decode_fixed32(&self.data[offset..])
+    }
 
-    // void SeekToRestartPoint(uint32_t index) {
-    //     key_.clear();
-    //     restart_index_ = index;
-    //     // current_ will be fixed by ParseNextKey();
+    fn seek_to_restart_point(&mut self, index: u32) {
+        self.key = String::new();
+        self.restart_index = index;
+        // current_ will be fixed by ParseNextKey();
 
-    //     // ParseNextKey() starts at the end of value_, so set value_ accordingly
-    //     uint32_t offset = GetRestartPoint(index);
-    //     value_ = Slice(data_ + offset, 0);
-    // }
+        // ParseNextKey() starts at the end of value_, so set value_ accordingly
+        let offset = self.get_restart_point(index);
+        self.value = &self.data[offset as usize..];
+    }
 
 }
 
