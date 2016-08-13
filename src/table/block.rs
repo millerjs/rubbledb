@@ -130,6 +130,22 @@ pub struct BlockIterator<'a, T: SliceComparator> {
 }
 
 impl<'a, T: SliceComparator> BlockIterator<'a, T> {
+
+    pub fn new(comparator: T, data: Slice, restarts: u32, num_restarts: u32) -> BlockIterator<'a, T>
+    {
+        assert!(num_restarts > 0);
+        BlockIterator::<T> {
+            key: String::new(),
+            value: data,
+            comparator: comparator,
+            data: data,
+            restarts: restarts,
+            num_restarts: num_restarts,
+            current: restarts,
+            restart_index: num_restarts,
+        }
+    }
+
     fn compare(&self, a: Slice, b: Slice) -> usize {
         self.comparator.compare(a, b)
     }
@@ -154,33 +170,10 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
         self.value = &self.data[offset as usize..];
     }
 
+
 }
 
 // class Block::Iter : public Iterator {
-
-//   inline int Compare(const Slice& a, const Slice& b) const {
-//     return comparator_->Compare(a, b);
-//   }
-
-//   // Return the offset in data_ just past the end of the current entry.
-//   inline uint32_t NextEntryOffset() const {
-//     return (value_.data() + value_.size()) - data_;
-//   }
-
-//   uint32_t GetRestartPoint(uint32_t index) {
-//     assert(index < num_restarts_);
-//     return DecodeFixed32(data_ + restarts_ + index * sizeof(uint32_t));
-//   }
-
-//   void SeekToRestartPoint(uint32_t index) {
-//     key_.clear();
-//     restart_index_ = index;
-//     // current_ will be fixed by ParseNextKey();
-
-//     // ParseNextKey() starts at the end of value_, so set value_ accordingly
-//     uint32_t offset = GetRestartPoint(index);
-//     value_ = Slice(data_ + offset, 0);
-//   }
 
 //  public:
 //   Iter(const Comparator* comparator,
