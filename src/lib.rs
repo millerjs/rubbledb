@@ -9,3 +9,4 @@ pub mod errors;
 pub mod status;
 pub mod slice;
 pub mod util;
+pub mod table;
