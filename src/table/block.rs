@@ -31,6 +31,19 @@ pub trait Block {
 impl Block for OwnedBlock {
     fn get_size(&self) -> usize { self.data.len() }
     fn data(&self) -> Slice { &self.data }
+
+// Iterator* Block::NewIterator(const Comparator* cmp) {
+//   if (size_ < sizeof(uint32_t)) {
+//     return NewErrorIterator(Status::Corruption("bad block contents"));
+//   }
+//   const uint32_t num_restarts = NumRestarts();
+//   if (num_restarts == 0) {
+//     return NewEmptyIterator();
+//   } else {
+//     return new Iter(cmp, data_, restart_offset_, num_restarts);
+//   }
+// }
+
 }
 
 impl<'a> Block for SliceBlock<'a> {
@@ -131,7 +144,8 @@ pub struct BlockIterator<'a, T: SliceComparator> {
 }
 
 impl<'a, T: SliceComparator> BlockIterator<'a, T> {
-    pub fn new(comparator: T, data: Slice<'a>, restarts: usize, num_restarts: usize) -> BlockIterator<'a, T>
+    pub fn new(comparator: T, data: Slice<'a>, restarts: usize, num_restarts: usize)
+               -> BlockIterator<'a, T>
     {
         assert!(num_restarts > 0);
         BlockIterator::<'a, T> {
@@ -318,49 +332,3 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
     }
 
 }
-
-
-
-//   bool ParseNextKey() {
-//     current_ = NextEntryOffset();
-//     const char* p = data_ + current_;
-//     const char* limit = data_ + restarts_;  // Restarts come right after data
-//     if (p >= limit) {
-//       // No more entries to return.  Mark as invalid.
-//       current_ = restarts_;
-//       restart_index_ = num_restarts_;
-//       return false;
-//     }
-
-//     // Decode next entry
-//     uint32_t shared, non_shared, value_length;
-//     p = DecodeEntry(p, limit, &shared, &non_shared, &value_length);
-//     if (p == NULL || key_.size() < shared) {
-//       CorruptionError();
-//       return false;
-//     } else {
-//       key_.resize(shared);
-//       key_.append(p, non_shared);
-//       value_ = Slice(p + non_shared, value_length);
-//       while (restart_index_ + 1 < num_restarts_ &&
-//              GetRestartPoint(restart_index_ + 1) < current_) {
-//         ++restart_index_;
-//       }
-//       return true;
-//     }
-//   }
-// };
-
-// Iterator* Block::NewIterator(const Comparator* cmp) {
-//   if (size_ < sizeof(uint32_t)) {
-//     return NewErrorIterator(Status::Corruption("bad block contents"));
-//   }
-//   const uint32_t num_restarts = NumRestarts();
-//   if (num_restarts == 0) {
-//     return NewEmptyIterator();
-//   } else {
-//     return new Iter(cmp, data_, restart_offset_, num_restarts);
-//   }
-// }
-
-// }  // namespace leveldb
