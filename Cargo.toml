@@ -1,0 +1,8 @@
+[package]
+name = "rubbledb"
+version = "0.1.0"
+authors = ["Joshua Miller <jsmiller@uchicago.edu>"]
+
+[dependencies]
+quick-error = "*"
+regex = "0.1"
