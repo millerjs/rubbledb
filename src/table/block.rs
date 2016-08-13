@@ -2,6 +2,7 @@ use ::slice::Slice;
 use ::errors::RubbleResult;
 use ::util::coding;
 use ::status::Status;
+use ::comparator::SliceComparator;
 use std::mem;
 use std::str;
 
@@ -146,10 +147,6 @@ fn decode_entry(mut p: &[u8]) -> RubbleResult<DecodedEntry>
         non_shared: non_shared,
         value_length: value_length,
     });
-}
-
-pub trait SliceComparator {
-    fn compare(&self, a: Slice, b: Slice) -> i32;
 }
 
 pub struct BlockIterator<'a, T: SliceComparator> {

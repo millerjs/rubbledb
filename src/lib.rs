@@ -13,3 +13,4 @@ pub mod slice;
 pub mod util;
 pub mod table;
 pub mod port;
+pub mod comparator;
