@@ -87,13 +87,13 @@ fn decode_entry(mut p: &[u8]) -> RubbleResult<DecodedEntry>
         cur += 3;
 
     } else {
-        let fallback = try!(util::get_varint32_ptr_fallback(p));
+        let fallback = try!(util::coding::get_varint32_ptr_fallback(p));
         p = fallback.slice;
         shared = fallback.value;
-        let fallback = try!(util::get_varint32_ptr_fallback(p));
+        let fallback = try!(util::coding::get_varint32_ptr_fallback(p));
         p = fallback.slice;
         non_shared = fallback.value;
-        let fallback = try!(util::get_varint32_ptr_fallback(p));
+        let fallback = try!(util::coding::get_varint32_ptr_fallback(p));
         p = fallback.slice;
         value_length = fallback.value;
     }
@@ -131,6 +131,27 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
     fn compare(&self, a: Slice, b: Slice) -> usize {
         self.comparator.compare(a, b)
     }
+
+    // /// Return the slice in data_ just past the end of the current entry.
+    // fn next_entry(&self) -> Slice {
+
+    // }
+
+    // fn get_restart_point(index: u32) ->  {
+    //     assert!(index < self.num_restarts);
+    //     // return DecodeFixed32(data_ + restarts_ + index * sizeof(uint32_t));
+    // }
+
+    // void SeekToRestartPoint(uint32_t index) {
+    //     key_.clear();
+    //     restart_index_ = index;
+    //     // current_ will be fixed by ParseNextKey();
+
+    //     // ParseNextKey() starts at the end of value_, so set value_ accordingly
+    //     uint32_t offset = GetRestartPoint(index);
+    //     value_ = Slice(data_ + offset, 0);
+    // }
+
 }
 
 // class Block::Iter : public Iterator {

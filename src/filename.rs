@@ -121,12 +121,12 @@ fn parse_file_name(fname: &str) -> RubbleResult<FileNameDetails>
         },
         name if name.starts_with("MANIFEST-") => {
             FileNameDetails {
-                number: try!(util::parse_u64(&fname["MANIFEST-".len()..])).number,
+                number: try!(util::coding::parse_u64(&fname["MANIFEST-".len()..])).number,
                 file_type: FileType::DescriptorFile,
             }
         }
         _ => {
-            let parsed = try!(util::parse_u64(fname));
+            let parsed = try!(util::coding::parse_u64(fname));
             let suffix = &fname[parsed.offset..];
             FileNameDetails {
                 number: parsed.number,
