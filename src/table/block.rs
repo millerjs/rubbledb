@@ -1,6 +1,5 @@
 use ::slice::Slice;
 use ::errors::RubbleResult;
-use ::util;
 use ::util::coding;
 use ::status::Status;
 use std::mem;
@@ -134,7 +133,8 @@ pub trait SliceComparator {
 pub struct BlockIterator<'a, T: SliceComparator> {
     comparator: T,
     data: Slice<'a>,
-    value: Slice<'a>,
+    value_offset: usize,
+    value_len: usize,
     restarts: usize,
     num_restarts: usize,
     current: usize,
@@ -151,7 +151,8 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
         BlockIterator::<'a, T> {
             key: String::new(),
             status: Status::Ok,
-            value: data,
+            value_offset: 0,
+            value_len: 0,
             comparator: comparator,
             data: data,
             restarts: restarts,
@@ -161,29 +162,32 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
         }
     }
 
-    fn compare(&self, a: Slice, b: Slice) -> i32 {
+    fn compare(&self, a: Slice, b: Slice) -> i32
+    {
         self.comparator.compare(a, b)
     }
 
-    /// Return the slice in data_ just past the end of the current entry.
-    fn next_entry_offset(&self) -> usize {
-        self.value.len()
+    /// Return the offset in data_ just past the end of the current entry.
+    fn next_entry_offset(&self) -> usize
+    {
+        self.value_offset + self.value_len
     }
 
-    fn get_restart_point(&self, index: usize) -> usize {
+    fn get_restart_point(&self, index: usize) -> usize
+    {
         assert!(index < self.num_restarts);
         let offset = self.restarts + index * mem::size_of::<u32>();
         coding::decode_fixed32(&self.data[offset..]) as usize
     }
 
-    pub fn seek_to_restart_point(&mut self, index: usize) {
+    pub fn seek_to_restart_point(&mut self, index: usize)
+    {
         self.key = String::new();
         self.restart_index = index;
         // current_ will be fixed by ParseNextKey();
 
         // ParseNextKey() starts at the end of value_, so set value_ accordingly
-        let offset = self.get_restart_point(index);
-        self.value = &self.data[offset as usize..];
+        self.value_offset = self.get_restart_point(index);
     }
 
     pub fn is_valid(&self) -> bool
@@ -197,10 +201,11 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
 
     pub fn key(&self) -> Slice {
         assert!(self.is_valid());
-        self.value
+        &self.data[self.value_offset..self.value_offset+self.value_len]
     }
 
     pub fn next(&mut self) {
+        assert!(self.is_valid());
         self.parse_next_key();
     }
 
@@ -319,7 +324,8 @@ impl<'a, T: SliceComparator> BlockIterator<'a, T> {
             .expect("Invalid UTF-8 key")
             .to_owned();
 
-        self.value = &p[entry.non_shared as usize..entry.value_length as usize];
+        self.value_offset = entry.non_shared as usize;
+        self.value_len = entry.value_length as usize;
 
         while self.restart_index + 1 < self.num_restarts
             && self.get_restart_point(self.restart_index + 1) < self.current
