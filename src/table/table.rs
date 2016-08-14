@@ -134,9 +134,9 @@ impl<'a> Table<'a> {
     fn read_meta(&mut self, footer: &Footer) -> RubbleResult<()>
     {
         // TODO: impl  self.rep.options.filter_policy.is_some()
-        //   if (rep_->options.filter_policy == NULL) {
-        //     return;  // Do not need any metadata
-        //   }
+        if self.rep.options.filter_policy.is_none() {
+            return Ok(())
+        }
 
         //   // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
         //   // it is an empty block.
