@@ -3,11 +3,12 @@ use ::slice::Slice;
 use ::status::Status;
 use ::util::coding;
 use ::errors::RubbleResult;
-use ::options::CompressionType;
+use ::options::{ReadOptions, CompressionType};
 use snappy;
 use std::fs::File;
 use std::io::SeekFrom;
 use std::io::prelude::*;
+
 
 pub const MAX_ENCODED_LENGTH: usize = 10 + 10;
 
@@ -24,7 +25,6 @@ const BLOCK_TRAILER_SIZE: usize = 5;
 /// of two block handles and a magic number.
 pub const ENCODED_LENGTH: usize = 2 * MAX_ENCODED_LENGTH + 8;
 
-pub struct ReadOptions;
 
 pub struct BlockHandle {
     pub offset: u64,
@@ -122,7 +122,6 @@ impl Footer {
         try!(self.index_handle.decode_from(input));
         // We skip over any leftover data (just padding for now) in "input"
         Ok(&magic_slice[8..])
-
     }
 
     pub fn encode_to(&self, dst: &mut Vec<u8>)
@@ -140,16 +139,26 @@ impl Footer {
 
 pub struct BlockContents {
     /// Actual contents of data
-    data: Vec<u8>,
+    pub data: Vec<u8>,
     /// True iff data can be cached
-    cachable: bool,
+    pub cachable: bool,
+}
+
+impl BlockContents {
+    pub fn new() -> BlockContents
+    {
+        BlockContents {
+            data: vec![],
+            cachable: true,
+        }
+    }
 }
 
 /// TODO allow for stack allocation?
 pub fn read_block(file: &mut File, options: &ReadOptions, handle: &BlockHandle)
                   -> RubbleResult<BlockContents>
 {
-    let mut result = BlockContents { data: vec![], cachable: false };
+    let mut result = BlockContents { data: vec![], cachable: true };
 
     // Read the block contents as well as the type/crc footer.
     // See table_builder.cc for the code that built this structure.

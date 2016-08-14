@@ -4,18 +4,26 @@ use ::comparator::SliceComparator;
 use ::slice::Slice;
 use ::status::Status;
 use ::table::format;
-use ::table::format::{MAX_ENCODED_LENGTH, ENCODED_LENGTH};
 use std::fs::File;
 use std::io::SeekFrom;
 use std::io::prelude::*;
+use ::table::format::{
+    MAX_ENCODED_LENGTH,
+    ENCODED_LENGTH,
+    BlockHandle,
+    BlockContents,
+    Footer,
+    read_block,
+};
+use ::options::{
+    Options,
+    ReadOptions,
+};
 
-struct BlockHandle;
-struct Footer;
-struct Options;
-struct ReadOptions;
-struct OpenOptions;
 struct TableCache;
 struct FilterBlockReader;
+
+
 
 struct TableRep<'a> {
     options: &'a Options,
@@ -24,7 +32,8 @@ struct TableRep<'a> {
     cache_id: u64,
     filter: FilterBlockReader,
     filter_data: Vec<u8>,
-    index_block: OwnedBlock,
+    index_block: BlockContents,
+    // metaindex_handle: &'a BlockHandle,
 }
 
 
@@ -32,17 +41,11 @@ struct TableRep<'a> {
 /// immutable and persistent.  A Table may be safely accessed from
 /// multiple threads without external synchronization.
 pub struct Table<'a> {
-    rep: &'a TableRep<'a>,
+    rep: TableRep<'a>,
 }
 
 
 impl<'a> Table<'a> {
-    fn new(rep: &'a TableRep) -> Table<'a>
-    {
-        Table {
-            rep: rep,
-        }
-    }
 
     /// Attempt to open the table that is stored in bytes [0..file_size)
     /// of "file", and read the metadata entries necessary to allow
@@ -56,54 +59,49 @@ impl<'a> Table<'a> {
     /// for the duration of the returned table's lifetime.
     ///
     /// *file must remain live while this Table is in use.
-    fn open(&mut self, options: &OpenOptions, file: &mut File, size: usize) -> RubbleResult<()>
+    fn open(options: &'a Options, file: &'a mut File, size: usize) -> RubbleResult<Table<'a>>
     {
         if size < ENCODED_LENGTH as usize {
             return Err(Status::Corruption("file is too short to be an sstable".into()).into());
         }
 
-        let mut footer_space = [0; ENCODED_LENGTH];
-        let mut footer_input: Slice;
+        let mut footer_input = [0; ENCODED_LENGTH];
 
         let footer_offset = -(ENCODED_LENGTH as i64);
         try!(file.seek(SeekFrom::End(footer_offset)));
-        try!(file.read_exact(&mut footer_space));
+        try!(file.read_exact(&mut footer_input));
 
-        // TODO
-        // let footer = try!(Footer::decode_from(&footer_input));
+        let mut footer = Footer::new();
+        try!(footer.decode_from(&footer_input));
 
-        // // Read the index block
-        // BlockContents contents;
-        // Block* index_block = NULL;
-        // if (s.ok()) {
-        //     ReadOptions opt;
-        //     if (options.paranoid_checks) {
-        //         opt.verify_checksums = true;
-        //     }
-        //     s = ReadBlock(file, opt, footer.index_handle(), &contents);
-        //     if (s.ok()) {
-        //         index_block = new Block(contents);
-        //     }
-        // }
+        let mut opt = ReadOptions::new();
+        let index_block = try!(read_block(file, &opt, footer.index_handle()));
+        opt.verify_checksums = options.paranoid_checks;
 
-        // if (s.ok()) {
-        //     // We've successfully read the footer and the index block: we're
-        //     // ready to serve requests.
-        //     Rep* rep = new Table::Rep;
-        //     rep->options = options;
-        //     rep->file = file;
-        //     rep->metaindex_handle = footer.metaindex_handle();
-        //     rep->index_block = index_block;
-        //     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
-        //     rep->filter_data = NULL;
-        //     rep->filter = NULL;
-        //     *table = new Table(rep);
-        //     (*table)->ReadMeta(footer);
-        // } else {
-        //     delete index_block;
-        // }
-        Ok(())
-        //   return s;
+        let cache_id = match options.block_cache.is_some() {
+            true => 0, //options.block_cache->NewId(),
+            false => 0,
+        };
+
+        // We've successfully read the footer and the index block: we're
+        // ready to serve requests.
+        let rep = TableRep {
+            status: Status::Ok,
+            options: options,
+            file: file,
+            index_block: index_block,
+            cache_id: cache_id,
+            filter_data: vec![],
+            // TODO
+            filter: FilterBlockReader{},
+        };
+
+        let mut table = Table {
+            rep: rep,
+        };
+
+        try!(table.read_meta(&footer));
+        Ok(table)
     }
 
     /// Returns a new iterator over the table contents.
@@ -133,70 +131,63 @@ impl<'a> Table<'a> {
     // fn internal_get(&self, options: &ReadOptions, key: Slice, void* arg,
     //                 void (*handle_result)(void* arg, const Slice& k, const Slice& v));
 
-    fn read_meta(&mut self, footer: &Footer)
+    fn read_meta(&mut self, footer: &Footer) -> RubbleResult<()>
     {
-        unimplemented!()
+        // TODO: impl  self.rep.options.filter_policy.is_some()
+        //   if (rep_->options.filter_policy == NULL) {
+        //     return;  // Do not need any metadata
+        //   }
+
+        //   // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
+        //   // it is an empty block.
+        //   ReadOptions opt;
+        //   if (rep_->options.paranoid_checks) {
+        //     opt.verify_checksums = true;
+        //   }
+        //   BlockContents contents;
+        //   if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
+        //     // Do not propagate errors since meta info is not needed for operation
+        //     return;
+        //   }
+        //   Block* meta = new Block(contents);
+
+        //   Iterator* iter = meta->NewIterator(BytewiseComparator());
+        //   std::string key = "filter.";
+        //   key.append(rep_->options.filter_policy->Name());
+        //   iter->Seek(key);
+        //   if (iter->Valid() && iter->key() == Slice(key)) {
+        //     ReadFilter(iter->value());
+        //   }
+        //   delete iter;
+        //   delete meta;
+        // }
+        Ok(())
     }
 
-    fn read_filter(&mut self, filter_handle_value: Slice)
+    fn read_filter(&mut self, filter_handle_value: Slice) -> RubbleResult<()>
     {
-        unimplemented!()
+        let mut filter_handle = BlockHandle::new();
+
+        let next = try!(filter_handle.decode_from(filter_handle_value));
+
+        // We might want to unify with ReadBlock() if we start
+        // requiring checksum verification in Table::Open.
+        let mut opt = ReadOptions::new();
+        if self.rep.options.paranoid_checks {
+            opt.verify_checksums = true;
+        }
+
+        // let mut file = &mut self.rep.file;
+        // let block = try!(read_block(file, &opt, &filter_handle));
+
+        // if (block.heap_allocated) {
+        // self.rep.filter_data = block.data;     // Will need to delete later??
+        // }
+        // self.rep.filter = FilterBlockReader::new(self.rep.options.filter_policy, block.data);
+        Ok(())
     }
 
 }
-
-
-// void Table::ReadMeta(const Footer& footer) {
-//   if (rep_->options.filter_policy == NULL) {
-//     return;  // Do not need any metadata
-//   }
-
-//   // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
-//   // it is an empty block.
-//   ReadOptions opt;
-//   if (rep_->options.paranoid_checks) {
-//     opt.verify_checksums = true;
-//   }
-//   BlockContents contents;
-//   if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
-//     // Do not propagate errors since meta info is not needed for operation
-//     return;
-//   }
-//   Block* meta = new Block(contents);
-
-//   Iterator* iter = meta->NewIterator(BytewiseComparator());
-//   std::string key = "filter.";
-//   key.append(rep_->options.filter_policy->Name());
-//   iter->Seek(key);
-//   if (iter->Valid() && iter->key() == Slice(key)) {
-//     ReadFilter(iter->value());
-//   }
-//   delete iter;
-//   delete meta;
-// }
-
-// void Table::ReadFilter(const Slice& filter_handle_value) {
-//   Slice v = filter_handle_value;
-//   BlockHandle filter_handle;
-//   if (!filter_handle.DecodeFrom(&v).ok()) {
-//     return;
-//   }
-
-//   // We might want to unify with ReadBlock() if we start
-//   // requiring checksum verification in Table::Open.
-//   ReadOptions opt;
-//   if (rep_->options.paranoid_checks) {
-//     opt.verify_checksums = true;
-//   }
-//   BlockContents block;
-//   if (!ReadBlock(rep_->file, opt, filter_handle, &block).ok()) {
-//     return;
-//   }
-//   if (block.heap_allocated) {
-//     rep_->filter_data = block.data.data();     // Will need to delete later
-//   }
-//   rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
-// }
 
 // Table::~Table() {
 //   delete rep_;

@@ -73,7 +73,7 @@ impl<'a> Block for SliceBlock<'a> {
 
 
 impl OwnedBlock {
-    fn new(contents: Slice) -> RubbleResult<OwnedBlock>
+    pub fn new(contents: Slice) -> RubbleResult<OwnedBlock>
     {
         let sizeof_u32 = mem::size_of::<u32>();
         let max_restarts_allowed = (contents.len() - sizeof_u32) / sizeof_u32;
