@@ -6,6 +6,7 @@ use ::errors::RubbleResult;
 use std::fs::File;
 use std::io::SeekFrom;
 use std::io::prelude::*;
+use ::options::CompressionType;
 
 pub const MAX_ENCODED_LENGTH: usize = 10 + 10;
 
@@ -185,6 +186,9 @@ pub fn read_block(file: &mut File, options: &ReadOptions, handle: &BlockHandle)
     //     }
     //   }
 
+    match data[n] {
+        Compres
+    }
     //   switch (data[n]) {
     //     case kNoCompression:
     //       if (data != buf) {
