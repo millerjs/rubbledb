@@ -6,6 +6,7 @@
 #[macro_use] extern crate quick_error;
 extern crate regex;
 extern crate byteorder;
+extern crate snappy;
 
 
 pub mod filename;
@@ -16,4 +17,4 @@ pub mod util;
 pub mod table;
 pub mod port;
 pub mod comparator;
-pub mod Options;
+pub mod options;
