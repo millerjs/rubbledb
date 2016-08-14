@@ -1,5 +1,6 @@
 use ::slice::Slice;
 use ::errors::RubbleResult;
+use ::status::Status;
 use ::port;
 use regex::Regex;
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
@@ -173,34 +174,26 @@ pub fn put_varint64(buff: &mut Vec<u8>, mut v: u64) -> usize
 //   }
 // }
 
-// const char* GetVarint64Ptr(const char* p, const char* limit, uint64_t* value) {
-//   uint64_t result = 0;
-//   for (uint32_t shift = 0; shift <= 63 && p < limit; shift += 7) {
-//     uint64_t byte = *(reinterpret_cast<const unsigned char*>(p));
-//     p++;
-//     if (byte & 128) {
-//       // More bytes are present
-//       result |= ((byte & 127) << shift);
-//     } else {
-//       result |= (byte << shift);
-//       *value = result;
-//       return reinterpret_cast<const char*>(p);
-//     }
-//   }
-//   return NULL;
-// }
+/// Returns (remaining slice, u64 result)
+pub fn get_varint64(slice: Slice) -> RubbleResult<(Slice, u64)>
+{
+    let mut result: u64 = 0;
+    let mut p = 0;
+    for shift in (0..10).map(|n| n*7) {
+        if p >= slice.len() { break }
+        let byte = slice[p] as u64;
+        p += 1;
+        if byte & 128 != 0 {
+            // More bytes are present
+            result |= (byte & 127) << shift;
+        } else {
+            result |= byte << shift;
+            return Ok((&slice[p..], result));
+        }
+    }
+    Err(Status::IOError("Unable to read varin64".into()).into())
+}
 
-// bool GetVarint64(Slice* input, uint64_t* value) {
-//   const char* p = input->data();
-//   const char* limit = p + input->size();
-//   const char* q = GetVarint64Ptr(p, limit, value);
-//   if (q == NULL) {
-//     return false;
-//   } else {
-//     *input = Slice(q, limit - q);
-//     return true;
-//   }
-// }
 
 // const char* GetLengthPrefixedSlice(const char* p, const char* limit,
 //                                    Slice* result) {

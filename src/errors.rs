@@ -1,3 +1,4 @@
+use ::status::Status;
 use std::io;
 use std::num::ParseIntError;
 
@@ -15,11 +16,17 @@ quick_error! {
             display("I/O error: {}", err)
             cause(err)
         }
+        Status(err: Status) {
+            from()
+            description("Status error")
+            display("Status error: {:?}", err)
+            cause(err)
+        }
         Other(descr: &'static str) {
             description(descr)
             display("Error {}", descr)
         }
-        Discard {
+        GeneralError {
             from(&'static str)
         }
     }

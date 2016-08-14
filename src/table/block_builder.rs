@@ -22,14 +22,6 @@
 ///     num_restarts: uint32
 /// restarts[i] contains the offset within the block of the ith restart point.
 
-// #include "table/block_builder.h"
-
-// #include <algorithm>
-// #include <assert.h>
-// #include "leveldb/comparator.h"
-// #include "leveldb/table_builder.h"
-// #include "util/coding.h"
-
 use ::comparator::SliceComparator;
 use ::slice::Slice;
 use ::util::coding;
@@ -76,7 +68,7 @@ impl<'a> BlockBuilder<'a> {
 
     pub fn new(options: &'a Options) -> BlockBuilder
     {
-        assert!(options.block_restart_interval > =1);
+        assert!(options.block_restart_interval >= 1);
         BlockBuilder {
             buffer: vec![],
             options: options,
