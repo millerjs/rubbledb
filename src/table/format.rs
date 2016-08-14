@@ -5,6 +5,7 @@ use ::util::coding;
 use ::errors::RubbleResult;
 use std::fs::File;
 use std::io::SeekFrom;
+use std::io::prelude::*;
 
 pub const MAX_ENCODED_LENGTH: usize = 10 + 10;
 
@@ -24,8 +25,8 @@ pub const ENCODED_LENGTH: usize = 2 * MAX_ENCODED_LENGTH + 8;
 pub struct ReadOptions;
 
 pub struct BlockHandle {
-    offset: u64,
-    size: u64,
+    pub offset: u64,
+    pub size: u64,
 }
 
 impl BlockHandle {
@@ -147,18 +148,12 @@ impl Footer {
 //     cachable: bool,
 // }
 
-
-struct BlockContents {
+pub struct BlockContents {
     /// Actual contents of data
     data: Vec<u8>,
     /// True iff data can be cached
     cachable: bool,
 }
-
-
-
-impl<'a> BlockContents for BorrowedBlockContents<'a> {}
-impl BlockContents for OwnedBlockContents {}
 
 pub fn read_block(file: &mut File, options: &ReadOptions, handle: &BlockHandle)
                   -> RubbleResult<BlockContents>
@@ -168,78 +163,68 @@ pub fn read_block(file: &mut File, options: &ReadOptions, handle: &BlockHandle)
 
     // Read the block contents as well as the type/crc footer.
     // See table_builder.cc for the code that built this structure.
-    let n = handle.size() as usize;
+    let n = handle.size as usize;
     let mut buff = Vec::<u8>::with_capacity(n + BLOCK_TRAILER_SIZE);
-    let mut contents = &buff.as_mut_slice();
+    let mut contents = &mut buff.as_mut_slice();
 
     // Slice contents;
-    try!(file.seek(SeekFrom::Start(handle.offset())))
-    try!(file.read_exact(&mut contents))
+    try!(file.seek(SeekFrom::Start(handle.offset)));
+    try!(file.read_exact(&mut contents));
 
-    // Status s = file->Read(handle.offset(), &contents);
-    // if (!s.ok()) {
-    //     delete[] buf;
-    //     return s;
-    // }
-    // if (contents.size() != n + kBlockTrailerSize) {
-    //     delete[] buf;
-    //     return Status::Corruption("truncated block read");
-    // }
+    // TODO CHECK CHECKSUMS
+    //
+    //   // Check the crc of the type and the block contents
+    //   const char* data = contents.data();    // Pointer to where Read put the data
+    //   if (options.verify_checksums) {
+    //     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
+    //     const uint32_t actual = crc32c::Value(data, n + 1);
+    //     if (actual != crc) {
+    //       delete[] buf;
+    //       s = Status::Corruption("block checksum mismatch");
+    //       return s;
+    //     }
+    //   }
 
+    //   switch (data[n]) {
+    //     case kNoCompression:
+    //       if (data != buf) {
+    //         // File implementation gave us pointer to some other data.
+    //         // Use it directly under the assumption that it will be live
+    //         // while the file is open.
+    //         delete[] buf;
+    //         result->data = Slice(data, n);
+    //         result->heap_allocated = false;
+    //         result->cachable = false;  // Do not double-cache
+    //       } else {
+    //         result->data = Slice(buf, n);
+    //         result->heap_allocated = true;
+    //         result->cachable = true;
+    //       }
+
+    //       // Ok
+    //       break;
+    //     case kSnappyCompression: {
+    //       size_t ulength = 0;
+    //       if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
+    //         delete[] buf;
+    //         return Status::Corruption("corrupted compressed block contents");
+    //       }
+    //       char* ubuf = new char[ulength];
+    //       if (!port::Snappy_Uncompress(data, n, ubuf)) {
+    //         delete[] buf;
+    //         delete[] ubuf;
+    //         return Status::Corruption("corrupted compressed block contents");
+    //       }
+    //       delete[] buf;
+    //       result->data = Slice(ubuf, ulength);
+    //       result->heap_allocated = true;
+    //       result->cachable = true;
+    //       break;
+    //     }
+    //     default:
+    //       delete[] buf;
+    //       return Status::Corruption("bad block type");
+    //   }
+
+    Ok(result)
 }
-
-//   // Check the crc of the type and the block contents
-//   const char* data = contents.data();    // Pointer to where Read put the data
-//   if (options.verify_checksums) {
-//     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
-//     const uint32_t actual = crc32c::Value(data, n + 1);
-//     if (actual != crc) {
-//       delete[] buf;
-//       s = Status::Corruption("block checksum mismatch");
-//       return s;
-//     }
-//   }
-
-//   switch (data[n]) {
-//     case kNoCompression:
-//       if (data != buf) {
-//         // File implementation gave us pointer to some other data.
-//         // Use it directly under the assumption that it will be live
-//         // while the file is open.
-//         delete[] buf;
-//         result->data = Slice(data, n);
-//         result->heap_allocated = false;
-//         result->cachable = false;  // Do not double-cache
-//       } else {
-//         result->data = Slice(buf, n);
-//         result->heap_allocated = true;
-//         result->cachable = true;
-//       }
-
-//       // Ok
-//       break;
-//     case kSnappyCompression: {
-//       size_t ulength = 0;
-//       if (!port::Snappy_GetUncompressedLength(data, n, &ulength)) {
-//         delete[] buf;
-//         return Status::Corruption("corrupted compressed block contents");
-//       }
-//       char* ubuf = new char[ulength];
-//       if (!port::Snappy_Uncompress(data, n, ubuf)) {
-//         delete[] buf;
-//         delete[] ubuf;
-//         return Status::Corruption("corrupted compressed block contents");
-//       }
-//       delete[] buf;
-//       result->data = Slice(ubuf, ulength);
-//       result->heap_allocated = true;
-//       result->cachable = true;
-//       break;
-//     }
-//     default:
-//       delete[] buf;
-//       return Status::Corruption("bad block type");
-//   }
-
-//   return Status::OK();
-// }
