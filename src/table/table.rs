@@ -7,6 +7,7 @@ use ::table::format;
 use std::fs::File;
 use std::io::SeekFrom;
 use std::io::prelude::*;
+use itertools::Zip;
 use ::table::format::{
     MAX_ENCODED_LENGTH,
     ENCODED_LENGTH,
@@ -25,10 +26,10 @@ struct FilterBlockReader;
 
 
 
-struct TableRep<'a> {
+struct TableRep<'a, F: Read + Seek> {
     options: &'a Options,
     status: Status,
-    file: &'a File,
+    file: F,
     cache_id: u64,
     filter: FilterBlockReader,
     filter_data: Vec<u8>,
@@ -40,12 +41,14 @@ struct TableRep<'a> {
 /// A Table is a sorted map from strings to strings.  Tables are
 /// immutable and persistent.  A Table may be safely accessed from
 /// multiple threads without external synchronization.
-pub struct Table<'a> {
-    rep: TableRep<'a>,
+pub struct Table<'a, F: Read + Seek> {
+    rep: TableRep<'a, F>,
 }
 
 
-impl<'a> Table<'a> {
+impl<'a, F> Table<'a, F>
+    where F: Read + Seek
+{
 
     /// Attempt to open the table that is stored in bytes [0..file_size)
     /// of "file", and read the metadata entries necessary to allow
@@ -59,7 +62,8 @@ impl<'a> Table<'a> {
     /// for the duration of the returned table's lifetime.
     ///
     /// *file must remain live while this Table is in use.
-    fn open(options: &'a Options, file: &'a mut File, size: usize) -> RubbleResult<Table<'a>>
+    fn open(options: &'a Options, mut file: F, size: usize) -> RubbleResult<Table<'a, F>>
+        where F: Read + Seek
     {
         if size < ENCODED_LENGTH as usize {
             return Err(Status::Corruption("file is too short to be an sstable".into()).into());
@@ -75,7 +79,7 @@ impl<'a> Table<'a> {
         try!(footer.decode_from(&footer_input));
 
         let mut opt = ReadOptions::new();
-        let index_block = try!(read_block(file, &opt, footer.index_handle()));
+        let index_block = try!(read_block(&mut file, &opt, footer.index_handle()));
         opt.verify_checksums = options.paranoid_checks;
 
         let cache_id = match options.block_cache.is_some() {
@@ -107,9 +111,12 @@ impl<'a> Table<'a> {
     /// Returns a new iterator over the table contents.
     /// The result of new_iterator() is initially invalid (caller must
     /// call one of the Seek methods on the iterator before using it).
-    fn new_iterator<'b, T>(&'b self, read_options: &ReadOptions) -> BlockIterator<'b, T>
+    fn iter<'b, T>(&'b self, read_options: &ReadOptions) -> BlockIterator<'b, T>
         where T: SliceComparator
     {
+        // return NewTwoLevelIterator(
+        //     rep_->index_block->NewIterator(rep_->options.comparator),
+        //     &Table::BlockReader, const_cast<Table*>(this), options);
         unimplemented!()
     }
 
@@ -122,6 +129,33 @@ impl<'a> Table<'a> {
     /// be close to the file length.
     fn approximate_offset_of(key: Slice) -> usize
     {
+
+        // let index_iter = self.rep.index_block.iter(self.rep.op);
+        // Iterator* index_iter =
+        //         rep_->index_block->NewIterator(rep_->options.comparator);
+        //     index_iter->Seek(key);
+        //     uint64_t result;
+        //     if (index_iter->Valid()) {
+        //         BlockHandle handle;
+        //         Slice input = index_iter->value();
+        //         Status s = handle.DecodeFrom(&input);
+        //         if (s.ok()) {
+        //             result = handle.offset();
+        //         } else {
+        //             // Strange: we can't decode the block handle in the index block.
+        //             // We'll just return the offset of the metaindex block, which is
+        //             // close to the whole file size for this case.
+        //             result = rep_->metaindex_handle.offset();
+        //         }
+        //     } else {
+        //         // key is past the last key in the file.  Approximate the offset
+        //         // by returning the offset of the metaindex block (which is
+        //         // right near the end of the file).
+        //         result = rep_->metaindex_handle.offset();
+        //     }
+        //     delete index_iter;
+        //     return result;
+        // }
         unimplemented!()
     }
 
@@ -177,9 +211,9 @@ impl<'a> Table<'a> {
             opt.verify_checksums = true;
         }
 
+        // TODO!
         // let mut file = &mut self.rep.file;
         // let block = try!(read_block(file, &opt, &filter_handle));
-
         // if (block.heap_allocated) {
         // self.rep.filter_data = block.data;     // Will need to delete later??
         // }
@@ -189,24 +223,22 @@ impl<'a> Table<'a> {
 
 }
 
-// Table::~Table() {
-//   delete rep_;
-// }
+struct LessThanComparator;
 
-// static void DeleteBlock(void* arg, void* ignored) {
-//   delete reinterpret_cast<Block*>(arg);
-// }
+impl SliceComparator for LessThanComparator {
+    fn compare(&self, a: Slice, b: Slice) -> i32
+    {
+        for (bytea, byteb) in Zip::new((a, b)) {
+            if bytea < byteb {
+                return 1
+            } else if bytea < byteb {
+                return -1
+            }
+        }
+        return 0
+    }
+}
 
-// static void DeleteCachedBlock(const Slice& key, void* value) {
-//   Block* block = reinterpret_cast<Block*>(value);
-//   delete block;
-// }
-
-// static void ReleaseBlock(void* arg, void* h) {
-//   Cache* cache = reinterpret_cast<Cache*>(arg);
-//   Cache::Handle* handle = reinterpret_cast<Cache::Handle*>(h);
-//   cache->Release(handle);
-// }
 
 // // Convert an index iterator value (i.e., an encoded BlockHandle)
 // // into an iterator over the contents of the corresponding block.
@@ -266,12 +298,6 @@ impl<'a> Table<'a> {
 //   return iter;
 // }
 
-// Iterator* Table::NewIterator(const ReadOptions& options) const {
-//   return NewTwoLevelIterator(
-//       rep_->index_block->NewIterator(rep_->options.comparator),
-//       &Table::BlockReader, const_cast<Table*>(this), options);
-// }
-
 // Status Table::InternalGet(const ReadOptions& options, const Slice& k,
 //                           void* arg,
 //                           void (*saver)(void*, const Slice&, const Slice&)) {
@@ -303,32 +329,5 @@ impl<'a> Table<'a> {
 //   return s;
 // }
 
-
-// uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
-//   Iterator* index_iter =
-//       rep_->index_block->NewIterator(rep_->options.comparator);
-//   index_iter->Seek(key);
-//   uint64_t result;
-//   if (index_iter->Valid()) {
-//     BlockHandle handle;
-//     Slice input = index_iter->value();
-//     Status s = handle.DecodeFrom(&input);
-//     if (s.ok()) {
-//       result = handle.offset();
-//     } else {
-//       // Strange: we can't decode the block handle in the index block.
-//       // We'll just return the offset of the metaindex block, which is
-//       // close to the whole file size for this case.
-//       result = rep_->metaindex_handle.offset();
-//     }
-//   } else {
-//     // key is past the last key in the file.  Approximate the offset
-//     // by returning the offset of the metaindex block (which is
-//     // right near the end of the file).
-//     result = rep_->metaindex_handle.offset();
-//   }
-//   delete index_iter;
-//   return result;
-// }
 
 // }  // namespace leveldb

@@ -155,8 +155,9 @@ impl BlockContents {
 }
 
 /// TODO allow for stack allocation?
-pub fn read_block(file: &mut File, options: &ReadOptions, handle: &BlockHandle)
+pub fn read_block<F>(file: &mut F, options: &ReadOptions, handle: &BlockHandle)
                   -> RubbleResult<BlockContents>
+    where F: Read + Seek
 {
     let mut result = BlockContents { data: vec![], cachable: true };
 

@@ -7,7 +7,7 @@
 extern crate regex;
 extern crate byteorder;
 extern crate snappy;
-
+extern crate itertools;
 
 pub mod filename;
 pub mod errors;
