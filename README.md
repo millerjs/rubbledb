@@ -1,3 +1,7 @@
+# RubbleDB
+
+WIP Rust port of LevelDB.
+
 ## TODO
 
 ### Table
